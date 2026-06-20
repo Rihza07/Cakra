@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowLeft,
@@ -20,7 +20,6 @@ import {
   CartesianGrid,
 } from "recharts";
 import type { Screen } from "./types";
-import { STOCK_PRICES } from "./data";
 
 interface Challenge15DayProps {
   navigate: (screen: Screen) => void;
@@ -55,18 +54,19 @@ export function Challenge15Day({
   const [cash, setCash] = useState(10_000_000);
   const [holdings, setHoldings] = useState<StockHolding[]>([]);
   const [log, setLog] = useState<string[]>([]);
-  const [selectedStock, setSelectedStock] = useState(STOCKS[0]);
   const [qty, setQty] = useState(1);
   const [action, setAction] = useState<"buy" | "sell">("buy");
   const [completed, setCompleted] = useState(challengeDay >= 15);
   const [expClaimed, setExpClaimed] = useState(false);
 
-  const todayPrices = STOCK_PRICES[currentDay - 1];
-  const prevPrices =
-    currentDay > 1 ? STOCK_PRICES[currentDay - 2] : STOCK_PRICES[0];
+  const getPrice = (key: (typeof STOCKS)[0]["key"]) => {
+    const stock = stocks.find(
+      (s) => s.symbol.replace(".JK", "").toLowerCase() === key,
+    );
 
-  const getPrice = (key: (typeof STOCKS)[0]["key"]) => todayPrices[key];
-  const getPrevPrice = (key: (typeof STOCKS)[0]["key"]) => prevPrices[key];
+    return stock?.regularMarketPrice ?? 0;
+  };
+  const getPrevPrice = (key: (typeof STOCKS)[0]["key"]) => getPrice(key);
 
   const portfolioValue = holdings.reduce((sum, h) => {
     const st = STOCKS.find((s) => s.symbol === h.symbol);
@@ -77,11 +77,6 @@ export function Challenge15Day({
   const totalValue = cash + portfolioValue;
   const pnl = totalValue - 10_000_000;
   const pnlPct = (pnl / 10_000_000) * 100;
-
-  const chartData = STOCK_PRICES.slice(0, currentDay).map((p, i) => ({
-    day: `D${i + 1}`,
-    [selectedStock.symbol]: p[selectedStock.key],
-  }));
 
   const handleTrade = () => {
     const price = getPrice(selectedStock.key);
@@ -151,6 +146,55 @@ export function Challenge15Day({
       setCurrentDay(next);
       setChallengeDay(next);
       if (next === 15) setCompleted(true);
+    }
+  };
+
+  const [chartData, setChartData] = useState([]);
+
+  const [selectedStock, setSelectedStock] = useState(STOCKS[0]);
+
+  const loadHistory = async () => {
+    const res = await fetch(
+      `/api/stocks/history?symbol=${selectedStock.symbol}.JK`,
+    );
+    const data = await res.json();
+
+    setChartData(
+      data.map((item: any) => ({
+        time: new Date(item.created_at).toLocaleTimeString("id-ID", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        price: Number(item.price),
+      })),
+    );
+  };
+
+  const [stocks, setStocks] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetchStocks();
+  }, []);
+
+  useEffect(() => {
+    loadHistory();
+  }, [selectedStock]);
+
+  useEffect(() => {
+    console.log("STOCKS:", stocks);
+  }, [stocks]);
+
+  const fetchStocks = async () => {
+    try {
+      const res = await fetch("/api/stocks");
+
+      const data = await res.json();
+
+      console.log("DATA HISTORY:", data);
+
+      setStocks(data);
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -571,44 +615,18 @@ export function Challenge15Day({
           >
             {selectedStock.symbol} — {currentDay} hari
           </p>
-          <ResponsiveContainer width="100%" height={100}>
-            <LineChart data={chartData}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="oklch(0.28 0.03 255 / 0.3)"
-              />
-              <XAxis
-                dataKey="day"
-                tick={{ fontSize: 10, fill: "oklch(0.58 0.02 255)" }}
-              />
-              <YAxis
-                domain={["auto", "auto"]}
-                tick={{ fontSize: 10, fill: "oklch(0.58 0.02 255)" }}
-                width={50}
-                tickFormatter={(v) => `${v / 1000}K`}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: "oklch(0.14 0.025 255)",
-                  border: "1px solid oklch(0.28 0.03 255 / 0.6)",
-                  borderRadius: "8px",
-                  color: "var(--foreground)",
-                  fontSize: "0.75rem",
-                }}
-                formatter={(value) => [
-                  `Rp${Number(value ?? 0).toLocaleString("id-ID")}`,
-                  selectedStock.symbol,
-                ]}
-              />
-              <Line
-                type="monotone"
-                dataKey={selectedStock.symbol}
-                stroke="oklch(0.72 0.19 145)"
-                strokeWidth={2}
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={150}>
+              <LineChart data={chartData}>
+                <XAxis dataKey="time" />
+                <Line type="monotone" dataKey="price" stroke="#22c55e" />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[60px] flex items-center justify-center">
+              Loading chart...
+            </div>
+          )}
         </div>
 
         {/* Trade panel */}
@@ -847,34 +865,6 @@ export function Challenge15Day({
               ))}
             </div>
           </div>
-        )}
-
-        {/* Advance day button */}
-        {currentDay < 15 ? (
-          <button
-            onClick={advanceDay}
-            className="w-full py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all"
-            style={{
-              background: "var(--secondary)",
-              border: "1px solid var(--border)",
-              color: "var(--foreground)",
-              fontWeight: 700,
-            }}
-          >
-            Lanjut ke Hari {currentDay + 1} <ChevronRight size={18} />
-          </button>
-        ) : (
-          <button
-            onClick={() => setCompleted(true)}
-            className="w-full py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all"
-            style={{
-              background: "oklch(0.72 0.19 145)",
-              color: "oklch(0.12 0.02 145)",
-              fontWeight: 700,
-            }}
-          >
-            <Trophy size={18} /> Lihat Hasil Akhir
-          </button>
         )}
       </div>
     </div>

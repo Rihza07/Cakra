@@ -247,20 +247,3 @@ export const PLACEMENT_QUESTIONS = [
   },
 ];
 
-export const STOCK_PRICES = [
-  { day: 1, bbca: 8750, tlkm: 3180, asii: 4280, goto: 54 },
-  { day: 2, bbca: 8800, tlkm: 3200, asii: 4310, goto: 56 },
-  { day: 3, bbca: 8720, tlkm: 3150, asii: 4250, goto: 52 },
-  { day: 4, bbca: 8900, tlkm: 3220, asii: 4350, goto: 58 },
-  { day: 5, bbca: 8950, tlkm: 3280, asii: 4400, goto: 61 },
-  { day: 6, bbca: 8880, tlkm: 3260, asii: 4370, goto: 59 },
-  { day: 7, bbca: 9000, tlkm: 3300, asii: 4420, goto: 63 },
-  { day: 8, bbca: 9100, tlkm: 3350, asii: 4480, goto: 67 },
-  { day: 9, bbca: 9050, tlkm: 3320, asii: 4450, goto: 65 },
-  { day: 10, bbca: 9200, tlkm: 3400, asii: 4520, goto: 70 },
-  { day: 11, bbca: 9150, tlkm: 3380, asii: 4490, goto: 68 },
-  { day: 12, bbca: 9300, tlkm: 3450, asii: 4580, goto: 73 },
-  { day: 13, bbca: 9380, tlkm: 3490, asii: 4620, goto: 76 },
-  { day: 14, bbca: 9250, tlkm: 3420, asii: 4550, goto: 71 },
-  { day: 15, bbca: 9450, tlkm: 3520, asii: 4700, goto: 79 },
-];
