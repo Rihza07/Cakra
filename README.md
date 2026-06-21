@@ -24,16 +24,19 @@ Cakra adalah aplikasi edukasi berbasis web yang dirancang untuk membantu penggun
 ### 1. Kloning Repositori
 git clone [https://github.com/username/cakra.git](https://github.com/username/cakra.git)
 cd cakra
+#
 
 
 ### 2. Instal Dependensi
 npm install
-# atau
+atau
 yarn install
-# atau
-pnpm install
+atau
+pnpm install 
+#
+
 
 ### 3. Jalankan Server Pengembangan
 npm run dev
-# atau
+atau
 yarn dev
