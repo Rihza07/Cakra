@@ -129,8 +129,9 @@ export default function App() {
     setUser((u) => (u ? { ...u, ...updates } : u));
   };
 
-  const fullUser: UserProfile | null = user
+  const fullUser: any = user
     ? {
+        id: user.email,
         ...user,
         level: currentLevel,
         exp: currentExp,
@@ -166,7 +167,12 @@ export default function App() {
 
       {needsNav && fullUser && (
         <div className="flex min-h-screen">
-          <SidebarNav current={screen} navigate={navigate} user={userForNav!} />
+          <SidebarNav
+            current={screen}
+            navigate={navigate}
+            user={userForNav!}
+            onLogout={handleLogout}
+          />
 
           <main
             className="flex-1 min-w-0 overflow-y-auto"
@@ -211,6 +217,7 @@ export default function App() {
             )}
             {screen === "challenge-15day" && (
               <Challenge15Day
+                user={fullUser!} // <-- Ganti currentUser menjadi fullUser!
                 navigate={navigate}
                 challengeDay={challengeDay}
                 setChallengeDay={setChallengeDay}

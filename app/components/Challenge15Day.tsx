@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
   TrendingUp,
@@ -21,11 +21,13 @@ import {
 } from "recharts";
 import type { Screen } from "./types";
 
+// 1. Tambahkan data user ke dalam Props Interface
 interface Challenge15DayProps {
   navigate: (screen: Screen) => void;
   challengeDay: number;
   setChallengeDay: React.Dispatch<React.SetStateAction<number>>;
   addExp: (amount: number, reason?: string) => void;
+  user: { id: number | string; name: string }; // Tambahkan ini agar ID bisa diakses dinamis
 }
 
 interface StockHolding {
@@ -46,6 +48,7 @@ export function Challenge15Day({
   challengeDay,
   setChallengeDay,
   addExp,
+  user, // 2. Terima data user di sini
 }: Challenge15DayProps) {
   const [started, setStarted] = useState(challengeDay > 0);
   const [currentDay, setCurrentDay] = useState(
@@ -58,14 +61,17 @@ export function Challenge15Day({
   const [action, setAction] = useState<"buy" | "sell">("buy");
   const [completed, setCompleted] = useState(challengeDay >= 15);
   const [expClaimed, setExpClaimed] = useState(false);
+  const [stocks, setStocks] = useState<any[]>([]);
+  const [chartData, setChartData] = useState([]);
+  const [selectedStock, setSelectedStock] = useState(STOCKS[0]);
 
   const getPrice = (key: (typeof STOCKS)[0]["key"]) => {
     const stock = stocks.find(
       (s) => s.symbol.replace(".JK", "").toLowerCase() === key,
     );
-
     return stock?.regularMarketPrice ?? 0;
   };
+
   const getPrevPrice = (key: (typeof STOCKS)[0]["key"]) => getPrice(key);
 
   const portfolioValue = holdings.reduce((sum, h) => {
@@ -140,19 +146,6 @@ export function Challenge15Day({
     }
   };
 
-  const advanceDay = () => {
-    if (currentDay < 15) {
-      const next = currentDay + 1;
-      setCurrentDay(next);
-      setChallengeDay(next);
-      if (next === 15) setCompleted(true);
-    }
-  };
-
-  const [chartData, setChartData] = useState([]);
-
-  const [selectedStock, setSelectedStock] = useState(STOCKS[0]);
-
   const loadHistory = async () => {
     const res = await fetch(
       `/api/stocks/history?symbol=${selectedStock.symbol}.JK`,
@@ -170,10 +163,65 @@ export function Challenge15Day({
     );
   };
 
-  const [stocks, setStocks] = useState<any[]>([]);
+  const fetchStocks = async () => {
+    try {
+      const res = await fetch("/api/stocks");
+      const data = await res.json();
+      setStocks(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // 3. Sesuaikan saveProgress agar userId menggunakan data dinamis
+  const saveProgress = async () => {
+    try {
+      await fetch("/api/challenge/save", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: user.id, // Diubah menjadi dinamis
+          cash,
+          holdings,
+          log,
+          currentDay,
+          completed,
+          expClaimed,
+        }),
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const loadProgress = async () => {
+    try {
+      const res = await fetch(`/api/challenge/load?userId=${user.id}`); // Menggunakan user.id langsung
+      const data = await res.json();
+
+      if (!data) return;
+
+      setCash(data.cash);
+      setHoldings(JSON.parse(data.holdings || "[]"));
+      setLog(JSON.parse(data.logs || "[]"));
+      setCurrentDay(data.current_day);
+      setCompleted(Boolean(data.completed));
+      setExpClaimed(Boolean(data.exp_claimed));
+      setStarted(true);
+
+      if (data.current_day && data.current_day !== challengeDay) {
+        setChallengeDay(data.current_day);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   useEffect(() => {
     fetchStocks();
+    loadProgress();
   }, []);
 
   useEffect(() => {
@@ -181,22 +229,9 @@ export function Challenge15Day({
   }, [selectedStock]);
 
   useEffect(() => {
-    console.log("STOCKS:", stocks);
-  }, [stocks]);
-
-  const fetchStocks = async () => {
-    try {
-      const res = await fetch("/api/stocks");
-
-      const data = await res.json();
-
-      console.log("DATA HISTORY:", data);
-
-      setStocks(data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
+    if (!started) return;
+    saveProgress();
+  }, [cash, holdings, log, currentDay, completed, expClaimed]);
 
   const claimReward = () => {
     if (expClaimed) return;
@@ -259,12 +294,24 @@ export function Challenge15Day({
             ))}
           </div>
           <button
-            onClick={() => {
+            // 4. Sesuaikan endpoint start agar userId menggunakan data dinamis
+            onClick={async () => {
+              await fetch("/api/challenge/start", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ userId: user.id }), // Diubah menjadi dinamis
+              });
+              await loadProgress();
               setStarted(true);
               setChallengeDay(1);
             }}
             className="w-full py-4 rounded-xl text-primary-foreground flex items-center justify-center gap-2"
-            style={{ background: "oklch(0.72 0.19 145)", fontWeight: 700 }}
+            style={{
+              background: "oklch(0.72 0.19 145)",
+              fontWeight: 700,
+            }}
           >
             Mulai Challenge <ChevronRight size={20} />
           </button>
@@ -274,6 +321,7 @@ export function Challenge15Day({
   }
 
   if (completed && currentDay === 15) {
+    // ... Bagian Tampilan Selesai tetap sama ...
     return (
       <div
         className="min-h-screen p-5 pb-24 lg:pb-8"
@@ -398,7 +446,7 @@ export function Challenge15Day({
 
   return (
     <div className="pb-24 lg:pb-8">
-      {/* Header */}
+      {/* ... Sisa Tampilan Utama / Halaman Transaksi tetap sama ... */}
       <div
         className="sticky top-0 z-20 px-4 pt-4 pb-3 flex items-center gap-3"
         style={{
@@ -442,7 +490,6 @@ export function Challenge15Day({
         </div>
       </div>
 
-      {/* Day progress */}
       <div className="px-5 pt-4 pb-0">
         <div
           className="h-1.5 rounded-full overflow-hidden"
@@ -475,7 +522,6 @@ export function Challenge15Day({
       </div>
 
       <div className="p-5 space-y-4">
-        {/* Portfolio summary */}
         <div
           className="rounded-2xl p-4"
           style={{
@@ -523,7 +569,6 @@ export function Challenge15Day({
           </div>
         </div>
 
-        {/* Stock prices */}
         <div>
           <p
             className="text-muted-foreground mb-2"
@@ -536,7 +581,7 @@ export function Challenge15Day({
               const price = getPrice(st.key);
               const prev = getPrevPrice(st.key);
               const diff = price - prev;
-              const diffPct = (diff / prev) * 100;
+              const diffPct = prev > 0 ? (diff / prev) * 100 : 0;
               const isUp = diff >= 0;
               return (
                 <button
@@ -601,7 +646,6 @@ export function Challenge15Day({
           </div>
         </div>
 
-        {/* Mini chart */}
         <div
           className="rounded-xl p-3"
           style={{
@@ -618,8 +662,71 @@ export function Challenge15Day({
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={150}>
               <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
                 <XAxis dataKey="time" />
-                <Line type="monotone" dataKey="price" stroke="#22c55e" />
+                <YAxis
+                  domain={["auto", "auto"]}
+                  tickFormatter={(value) => `${(value / 1000).toFixed(1)}K`}
+                />
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload || !payload.length) return null;
+                    const data = payload[0].payload;
+                    return (
+                      <div
+                        style={{
+                          background: "#111827",
+                          border: "1px solid #22c55e",
+                          borderRadius: "12px",
+                          padding: "12px",
+                          boxShadow: "0 8px 20px rgba(0,0,0,0.3)",
+                          minWidth: "140px",
+                        }}
+                      >
+                        <p
+                          style={{
+                            color: "#9CA3AF",
+                            fontSize: "12px",
+                            marginBottom: "6px",
+                          }}
+                        >
+                          {data.time}
+                        </p>
+                        <p
+                          style={{
+                            color: "#22c55e",
+                            fontWeight: "bold",
+                            fontSize: "18px",
+                          }}
+                        >
+                          Rp {data.price.toLocaleString("id-ID")}
+                        </p>
+                        <p
+                          style={{
+                            color: "#D1D5DB",
+                            fontSize: "12px",
+                            marginTop: "4px",
+                          }}
+                        >
+                          Harga Saham
+                        </p>
+                      </div>
+                    );
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="price"
+                  stroke="#22c55e"
+                  strokeWidth={3}
+                  dot={false}
+                  activeDot={{
+                    r: 7,
+                    fill: "#22c55e",
+                    stroke: "#ffffff",
+                    strokeWidth: 2,
+                  }}
+                />
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -629,7 +736,6 @@ export function Challenge15Day({
           )}
         </div>
 
-        {/* Trade panel */}
         <div
           className="rounded-xl p-4"
           style={{
@@ -744,7 +850,7 @@ export function Challenge15Day({
               className="text-muted-foreground ml-auto"
               style={{ fontSize: "0.78rem" }}
             >
-              ≈ Rp
+              ≈ Rp{" "}
               {(getPrice(selectedStock.key) * qty * 100).toLocaleString("id")}
             </span>
           </div>
@@ -767,7 +873,6 @@ export function Challenge15Day({
           </button>
         </div>
 
-        {/* Holdings */}
         {holdings.length > 0 && (
           <div
             className="rounded-xl p-4"
@@ -808,7 +913,7 @@ export function Challenge15Day({
                         className="text-muted-foreground"
                         style={{ fontSize: "0.72rem" }}
                       >
-                        {h.shares / 100} lot @ Rp
+                        {h.shares / 100} lot @ Rp{" "}
                         {h.avgPrice.toLocaleString("id")}
                       </p>
                     </div>
@@ -842,7 +947,13 @@ export function Challenge15Day({
           </div>
         )}
 
-        {/* Log */}
+        <button
+          onClick={saveProgress}
+          className="bg-green-500 p-2 rounded text-white font-bold"
+        >
+          Test Save
+        </button>
+
         {log.length > 0 && (
           <div
             className="rounded-xl p-3"
