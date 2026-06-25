@@ -12,9 +12,10 @@ import {
   Shield,
   Zap,
 } from "lucide-react";
+import type { UserProfile } from "./types";
 
 interface AuthPageProps {
-  onAuth: (name: string, email: string) => void;
+  onAuth: (authUser: Partial<UserProfile> & { name: string; email: string }) => void;
 }
 
 export function AuthPage({ onAuth }: AuthPageProps) {
@@ -80,9 +81,7 @@ export function AuthPage({ onAuth }: AuthPageProps) {
           throw new Error(data.error);
         }
 
-        localStorage.setItem("user", JSON.stringify(data.user));
-
-        onAuth(data.user.name, data.user.email);
+        onAuth(data.user);
       }
     } catch (error) {
       setError(error instanceof Error ? error.message : "Terjadi kesalahan");

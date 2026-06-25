@@ -247,3 +247,29 @@ export const PLACEMENT_QUESTIONS = [
   },
 ];
 
+
+// ─── Category groups ──────────────────────────────────────────────────────────
+// Used by ProfilePage to compute per-category progress dynamically.
+// Module IDs match MODULES above exactly.
+
+export interface CategoryGroup {
+  label: string;
+  moduleIds: string[];
+  color: string;
+}
+
+export const CATEGORY_GROUPS: CategoryGroup[] = [
+  {
+    label: 'Literasi Keuangan',
+    // m1 Dasar Keuangan, m2 Inflasi, m3 Tabungan, m5 Reksa Dana, m6 Obligasi
+    moduleIds: ['m1', 'm2', 'm3', 'm5', 'm6'],
+    color: 'oklch(0.80 0.17 75)',
+  },
+  {
+    label: 'Pasar Modal & Saham',
+    // m4 Pengenalan Pasar Modal, m7 Fundamental, m8 Teknikal, m9 Risiko,
+    // m10 Trading Advanced, m11 Derivatif, m12 Optimasi Portofolio
+    moduleIds: ['m4', 'm7', 'm8', 'm9', 'm10', 'm11', 'm12'],
+    color: 'oklch(0.60 0.20 265)',
+  },
+];

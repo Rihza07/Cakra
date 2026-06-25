@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import type { RowDataPacket } from "mysql2";
 
 export async function POST(req: Request) {
   try {
     const { name, email, password } = await req.json();
 
     // cek email sudah ada atau belum
-    const [existing]: any = await db.query(
+    const [existing] = await db.query<RowDataPacket[]>(
       "SELECT id FROM users WHERE email = ?",
-      [email]
+      [email],
     );
 
     if (existing.length > 0) {
@@ -22,10 +23,25 @@ export async function POST(req: Request) {
     // hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // simpan user
+    // simpan user dengan field statistik default
     await db.query(
-      "INSERT INTO users (name,email,password) VALUES (?,?,?)",
-      [name, email, hashedPassword]
+      "INSERT INTO users (name,email,password,level,exp,max_exp,streak,placement_level,join_date,bio,login_dates,completed_modules,completed_module_dates,daily_xp_history) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [
+        name,
+        email,
+        hashedPassword,
+        1,
+        0,
+        500,
+        0,
+        "pemula",
+        new Date().toISOString().slice(0, 10),
+        "",
+        JSON.stringify([]),
+        JSON.stringify([]),
+        JSON.stringify({}),
+        JSON.stringify({}),
+      ]
     );
 
     return NextResponse.json({

@@ -1,24 +1,18 @@
-import { useState, useRef } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Edit3,
   Check,
   X,
   Camera,
-  Star,
   Trophy,
-  Flame,
   Zap,
   BookOpen,
   TrendingUp,
-  Target,
-  Award,
   Settings,
   ChevronRight,
   BarChart2,
-  Calendar,
   Shield,
-  Medal,
 } from "lucide-react";
 import {
   RadarChart,
@@ -26,24 +20,24 @@ import {
   PolarAngleAxis,
   Radar,
   ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
 } from "recharts";
 import type { Screen, UserProfile } from "./types";
-import { MODULES } from "./data";
+import { MODULES, CATEGORY_GROUPS } from "./data";
+
+// ─── Props ────────────────────────────────────────────────────────────────────
 
 interface ProfilePageProps {
   user: UserProfile;
   navigate: (screen: Screen) => void;
   totalExp: number;
+  weeklyXp: number;
   completedModules: string[];
-  streak: number;
-  onUpdateUser: (updates: Partial<Pick<UserProfile, "name">>) => void;
+  longestStreak: number;
+  loginDates: string[]; // ISO date strings "YYYY-MM-DD" for each day the user logged in
+  onUpdateUser: (updates: Partial<Pick<UserProfile, "name" | "bio">>) => void;
 }
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const LEVEL_NAMES: Record<number, string> = {
   1: "Pemula Finansial",
@@ -63,171 +57,135 @@ const AVATAR_COLORS = [
   "oklch(0.55 0.22 25)",
 ];
 
-const BADGES = [
-  {
-    id: "first_login",
-    emoji: "🌟",
-    label: "Langkah Pertama",
-    desc: "Login pertama kali",
-    unlocked: true,
-  },
-  {
-    id: "placement",
-    emoji: "🎯",
-    label: "Placement Pro",
-    desc: "Selesaikan placement test",
-    unlocked: true,
-  },
-  {
-    id: "streak_7",
-    emoji: "🔥",
-    label: "Streak 7 Hari",
-    desc: "Login 7 hari berturut",
-    unlocked: true,
-  },
-  {
-    id: "first_module",
-    emoji: "📚",
-    label: "Pembaca Tekun",
-    desc: "Selesaikan modul pertama",
-    unlocked: false,
-  },
-  {
-    id: "quiz_perfect",
-    emoji: "💯",
-    label: "Nilai Sempurna",
-    desc: "Quiz dengan skor 100%",
-    unlocked: false,
-  },
-  {
-    id: "level_2",
-    emoji: "🏅",
-    label: "Naik Level",
-    desc: "Capai Level 2",
-    unlocked: false,
-  },
-  {
-    id: "ai_user",
-    emoji: "🤖",
-    label: "AI Explorer",
-    desc: "Gunakan AI Assistant 10x",
-    unlocked: false,
-  },
-  {
-    id: "challenger",
-    emoji: "⚔️",
-    label: "Challenger",
-    desc: "Mulai challenge pertama",
-    unlocked: false,
-  },
-  {
-    id: "investor",
-    emoji: "💼",
-    label: "Investor Muda",
-    desc: "Selesaikan simulasi portofolio",
-    unlocked: false,
-  },
-  {
-    id: "streak_30",
-    emoji: "🌈",
-    label: "Streak Legend",
-    desc: "Login 30 hari berturut",
-    unlocked: false,
-  },
-  {
-    id: "all_modules",
-    emoji: "🎓",
-    label: "Sarjana Keuangan",
-    desc: "Selesaikan semua modul",
-    unlocked: false,
-  },
-  {
-    id: "master",
-    emoji: "👑",
-    label: "Master CAKRA",
-    desc: "Capai Level 6",
-    unlocked: false,
-  },
-];
+// ─── GitHub-style contribution calendar ───────────────────────────────────────
+
+// Returns an array of 52 weeks × 7 days = 364 cells, newest cell = today.
+// Each cell carries { dateStr, count } where count is 0 or 1 (logged-in that day).
+function buildContributionCalendar(loginDates: string[]) {
+  const loginSet = new Set(loginDates);
+  const TOTAL_DAYS = 364; // 52 full weeks
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return Array.from({ length: TOTAL_DAYS }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() - (TOTAL_DAYS - 1 - i));
+    const dateStr = d.toISOString().slice(0, 10);
+    const count = loginSet.has(dateStr) ? 1 : 0;
+    return { dateStr, count };
+  });
+}
+
+// Map login count to a visual intensity level 0–3 for colour ramp.
+function cellColor(count: number, baseColor: string): string {
+  if (count === 0) return "var(--muted)";
+  // Single intensity for logins (either logged in or not),
+  // but we can still provide a ramp for future daily-activity counts.
+  if (count >= 3) return baseColor;
+  if (count === 2) return `color-mix(in oklch, ${baseColor} 70%, transparent)`;
+  return `color-mix(in oklch, ${baseColor} 40%, transparent)`;
+}
+
+// Week-day labels (Sun … Sat) matching a standard contribution graph.
+const WEEKDAY_LABELS = ["Min", "", "Sel", "", "Kam", "", "Sab"];
+
+// Month labels: derive from the calendar cells grouped into weeks.
+function buildMonthLabels(
+  cells: { dateStr: string }[],
+  weekCount: number,
+): { label: string; col: number }[] {
+  const labels: { label: string; col: number }[] = [];
+  const months = [
+    "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+    "Jul", "Agu", "Sep", "Okt", "Nov", "Des",
+  ];
+  let lastMonth = -1;
+  for (let w = 0; w < weekCount; w++) {
+    const cellIdx = w * 7;
+    if (cellIdx >= cells.length) break;
+    const m = new Date(cells[cellIdx].dateStr).getMonth();
+    if (m !== lastMonth) {
+      labels.push({ label: months[m], col: w });
+      lastMonth = m;
+    }
+  }
+  return labels;
+}
+
+// ─── Skill radar helper ────────────────────────────────────────────────────────
 
 function buildSkillData(completedModules: string[]) {
-  const categories = [
-    { label: "Keuangan Dasar", moduleIds: ["m1", "m2", "m3"] },
-    { label: "Pasar Modal", moduleIds: ["m4", "m5", "m6"] },
-    { label: "Analisis Saham", moduleIds: ["m7", "m8"] },
-    { label: "Manaj. Risiko", moduleIds: ["m9"] },
-    { label: "Strategi Lanjut", moduleIds: ["m10", "m11", "m12"] },
-  ];
-  return categories.map((cat) => ({
+  return CATEGORY_GROUPS.map((cat) => ({
     subject: cat.label,
-    value: Math.round(
-      (cat.moduleIds.filter((id) => completedModules.includes(id)).length /
-        cat.moduleIds.length) *
-        100,
-    ),
+    value:
+      cat.moduleIds.length === 0
+        ? 0
+        : Math.round(
+            (cat.moduleIds.filter((id) => completedModules.includes(id)).length /
+              cat.moduleIds.length) *
+              100,
+          ),
     fullMark: 100,
   }));
 }
 
-function buildWeeklyExpData(totalExp: number) {
-  // Simulated weekly EXP history
-  const base = Math.max(20, Math.floor(totalExp / 8));
-  return [
-    { day: "Sen", exp: Math.floor(base * 0.4) },
-    { day: "Sel", exp: Math.floor(base * 0.7) },
-    { day: "Rab", exp: Math.floor(base * 0.5) },
-    { day: "Kam", exp: Math.floor(base * 0.9) },
-    { day: "Jum", exp: Math.floor(base * 0.6) },
-    { day: "Sab", exp: Math.floor(base * 1.1) },
-    { day: "Min", exp: Math.floor(base * 0.3) },
-  ];
+// ─── Weekly EXP helper (based on real login + module data) ───────────────────
+
+function formatLocalDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
-function buildStreakCalendar(streak: number) {
-  const days = 35;
-  return Array.from({ length: days }, (_, i) => {
-    const daysAgo = days - 1 - i;
-    const active = daysAgo < streak;
-    const intensity = active ? (daysAgo < 7 ? 3 : daysAgo < 14 ? 2 : 1) : 0;
-    return { intensity };
-  });
-}
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function ProfilePage({
   user,
   navigate,
   totalExp,
+  weeklyXp,
   completedModules,
-  streak,
+  longestStreak,
+  loginDates = [],
   onUpdateUser,
 }: ProfilePageProps) {
   const [editingName, setEditingName] = useState(false);
   const [editingBio, setEditingBio] = useState(false);
   const [nameInput, setNameInput] = useState(user.name);
-  const [bio, setBio] = useState(
-    "Sedang belajar literasi keuangan & investasi saham 📈",
-  );
-  const [bioInput, setBioInput] = useState(bio);
+  const [bioInput, setBioInput] = useState(user.bio ?? "");
   const [avatarColor, setAvatarColor] = useState(AVATAR_COLORS[0]);
   const [showColorPicker, setShowColorPicker] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "badges" | "stats">(
-    "overview",
+  const [activeTab, setActiveTab] = useState<"overview" | "stats">("overview");
+
+  // ── Derived values ──────────────────────────────────────────────────────────
+
+  const levelName = LEVEL_NAMES[user.level] ?? "Legenda";
+  const expPercent = user.maxExp > 0 ? (user.exp / user.maxExp) * 100 : 0;
+  const completedCount = completedModules.length;
+
+  const calendarCells = useMemo(
+    () => buildContributionCalendar(loginDates),
+    [loginDates],
+  );
+  // 364 days → 52 weeks; cells are ordered oldest→newest, each week is a column.
+  const WEEK_COUNT = 52;
+  const monthLabels = useMemo(
+    () => buildMonthLabels(calendarCells, WEEK_COUNT),
+    [calendarCells],
   );
 
-  const skillData = buildSkillData(completedModules);
-  const weeklyExp = buildWeeklyExpData(totalExp);
-  const streakCal = buildStreakCalendar(streak);
-  const completedCount = completedModules.length;
-  const levelName = LEVEL_NAMES[user.level] ?? "Legenda";
-  const expPercent = (user.exp / user.maxExp) * 100;
-  const unlockedBadges = BADGES.filter((b) => b.unlocked).length;
+  const skillData = useMemo(
+    () => buildSkillData(completedModules),
+    [completedModules],
+  );
+  const totalLoginDays = loginDates.length;
+  const totalWeeklyExp = weeklyXp;
+  const placementDisplay = user.placementLevel
+    ? user.placementLevel.charAt(0).toUpperCase() + user.placementLevel.slice(1)
+    : levelName;
 
-  const intensityColor = (n: number) => {
-    if (n === 0) return "var(--muted)";
-    if (n === 1) return "oklch(0.72 0.19 145 / 0.3)";
-    if (n === 2) return "oklch(0.72 0.19 145 / 0.6)";
-    return "oklch(0.72 0.19 145)";
-  };
+  // ── Handlers ─────────────────────────────────────────────────────────────────
 
   const saveName = () => {
     if (nameInput.trim()) {
@@ -237,13 +195,19 @@ export function ProfilePage({
   };
 
   const saveBio = () => {
-    setBio(bioInput.trim() || bio);
+    onUpdateUser({ bio: bioInput.trim() });
     setEditingBio(false);
   };
 
+  // ── Avatar initial ────────────────────────────────────────────────────────────
+
+  const avatarLetter = user.name ? user.name.charAt(0).toUpperCase() : "?";
+
+  // ─────────────────────────────────────────────────────────────────────────────
+
   return (
     <div className="pb-24 lg:pb-8">
-      {/* Hero header */}
+      {/* ── Hero header ───────────────────────────────────────────────────── */}
       <div
         className="relative overflow-hidden pb-6"
         style={{
@@ -252,7 +216,7 @@ export function ProfilePage({
           borderBottom: "1px solid var(--border)",
         }}
       >
-        {/* Decorative circles */}
+        {/* Decorative ambient glows */}
         <div
           className="absolute -top-16 -right-16 w-48 h-48 rounded-full pointer-events-none"
           style={{
@@ -268,7 +232,7 @@ export function ProfilePage({
         />
 
         <div className="relative z-10 px-5 pt-6">
-          {/* Avatar */}
+          {/* Avatar + name row */}
           <div className="flex items-end gap-4 mb-4">
             <div className="relative">
               <motion.div
@@ -283,12 +247,12 @@ export function ProfilePage({
                 <span
                   style={{
                     fontWeight: 900,
-                    fontSize: "2.5rem",
+                    fontSize: user.name ? "2.5rem" : "1.5rem",
                     color: "oklch(0.10 0.025 255)",
                     lineHeight: 1,
                   }}
                 >
-                  {user.name.charAt(0).toUpperCase()}
+                  {avatarLetter}
                 </span>
                 <div
                   className="absolute -bottom-2 -right-2 w-8 h-8 rounded-xl flex items-center justify-center"
@@ -304,7 +268,7 @@ export function ProfilePage({
                 </div>
               </motion.div>
 
-              {/* Color picker */}
+              {/* Colour picker popover */}
               <AnimatePresence>
                 {showColorPicker && (
                   <motion.div
@@ -341,7 +305,7 @@ export function ProfilePage({
             </div>
 
             <div className="flex-1 pb-1">
-              {/* Level badge */}
+              {/* Level pill */}
               <div
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full mb-2"
                 style={{
@@ -361,7 +325,7 @@ export function ProfilePage({
                 </span>
               </div>
 
-              {/* Name */}
+              {/* Editable name */}
               {editingName ? (
                 <div className="flex items-center gap-2">
                   <input
@@ -370,8 +334,12 @@ export function ProfilePage({
                     onChange={(e) => setNameInput(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") saveName();
-                      if (e.key === "Escape") setEditingName(false);
+                      if (e.key === "Escape") {
+                        setEditingName(false);
+                        setNameInput(user.name);
+                      }
                     }}
+                    placeholder="Nama kamu"
                     className="flex-1 px-2 py-1 rounded-lg text-foreground outline-none"
                     style={{
                       background: "var(--input-background)",
@@ -404,12 +372,21 @@ export function ProfilePage({
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <h1
-                    className="text-foreground"
-                    style={{ fontWeight: 800, fontSize: "1.2rem" }}
-                  >
-                    {user.name}
-                  </h1>
+                  {user.name ? (
+                    <h1
+                      className="text-foreground"
+                      style={{ fontWeight: 800, fontSize: "1.2rem" }}
+                    >
+                      {user.name}
+                    </h1>
+                  ) : (
+                    <span
+                      className="text-muted-foreground"
+                      style={{ fontWeight: 600, fontSize: "1rem" }}
+                    >
+                      Tambah nama…
+                    </span>
+                  )}
                   <button
                     onClick={() => setEditingName(true)}
                     className="w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:opacity-80"
@@ -419,16 +396,26 @@ export function ProfilePage({
                   </button>
                 </div>
               )}
-              <p
-                className="text-muted-foreground"
-                style={{ fontSize: "0.78rem" }}
-              >
-                {user.email}
-              </p>
+
+              {user.email ? (
+                <p
+                  className="text-muted-foreground"
+                  style={{ fontSize: "0.78rem" }}
+                >
+                  {user.email}
+                </p>
+              ) : (
+                <p
+                  className="text-muted-foreground"
+                  style={{ fontSize: "0.78rem", fontStyle: "italic" }}
+                >
+                  Belum ada email
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Bio */}
+          {/* Editable bio */}
           {editingBio ? (
             <div className="mb-4">
               <textarea
@@ -436,6 +423,7 @@ export function ProfilePage({
                 value={bioInput}
                 onChange={(e) => setBioInput(e.target.value)}
                 rows={2}
+                placeholder="Tulis sedikit tentang dirimu…"
                 onKeyDown={(e) => {
                   if (e.key === "Escape") setEditingBio(false);
                 }}
@@ -461,7 +449,7 @@ export function ProfilePage({
                 <button
                   onClick={() => {
                     setEditingBio(false);
-                    setBioInput(bio);
+                    setBioInput(user.bio ?? "");
                   }}
                   className="px-3 py-1.5 rounded-lg text-sm text-muted-foreground"
                   style={{ background: "var(--muted)" }}
@@ -475,12 +463,25 @@ export function ProfilePage({
               onClick={() => setEditingBio(true)}
               className="flex items-start gap-2 mb-4 group text-left w-full"
             >
-              <p
-                className="text-muted-foreground"
-                style={{ fontSize: "0.875rem", lineHeight: 1.6 }}
-              >
-                {bio}
-              </p>
+              {user.bio ? (
+                <p
+                  className="text-muted-foreground"
+                  style={{ fontSize: "0.875rem", lineHeight: 1.6 }}
+                >
+                  {user.bio}
+                </p>
+              ) : (
+                <p
+                  className="text-muted-foreground"
+                  style={{
+                    fontSize: "0.875rem",
+                    lineHeight: 1.6,
+                    fontStyle: "italic",
+                  }}
+                >
+                  Tambah bio…
+                </p>
+              )}
               <Edit3
                 size={13}
                 className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity mt-0.5 flex-shrink-0"
@@ -488,7 +489,7 @@ export function ProfilePage({
             </button>
           )}
 
-          {/* EXP bar */}
+          {/* EXP progress bar */}
           <div className="mb-1 flex items-center justify-between">
             <span
               className="text-muted-foreground"
@@ -529,33 +530,16 @@ export function ProfilePage({
         </div>
       </div>
 
-      {/* Quick stats */}
+      {/* ── Quick stat pills ──────────────────────────────────────────────── */}
       <div className="px-5 py-5">
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {[
-            {
-              label: "Level",
-              value: user.level,
-              icon: "🏆",
-              color: avatarColor,
-            },
-            {
-              label: "Modul",
-              value: completedCount,
-              icon: "📚",
-              color: "oklch(0.60 0.20 265)",
-            },
+            { label: "Level", value: user.level, color: avatarColor },
+            { label: "Modul", value: completedCount, color: avatarColor },
             {
               label: "Streak",
-              value: `${streak}🔥`,
-              icon: "🔥",
-              color: "var(--streak-color)",
-            },
-            {
-              label: "Badge",
-              value: `${unlockedBadges}/${BADGES.length}`,
-              icon: "🏅",
-              color: "oklch(0.80 0.17 75)",
+              value: `${longestStreak}🔥`,
+              color: avatarColor,
             },
           ].map((item) => (
             <motion.div
@@ -568,7 +552,11 @@ export function ProfilePage({
               }}
             >
               <p
-                style={{ fontWeight: 900, fontSize: "1rem", color: item.color }}
+                style={{
+                  fontWeight: 900,
+                  fontSize: "1rem",
+                  color: item.color,
+                }}
               >
                 {item.value}
               </p>
@@ -583,13 +571,13 @@ export function ProfilePage({
         </div>
       </div>
 
-      {/* Tab bar */}
+      {/* ── Tab bar ───────────────────────────────────────────────────────── */}
       <div className="px-5 mb-5">
         <div
           className="flex rounded-xl p-1 gap-1"
           style={{ background: "var(--muted)" }}
         >
-          {(["overview", "badges", "stats"] as const).map((tab) => (
+          {(["overview", "stats"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -618,11 +606,7 @@ export function ProfilePage({
                       : "var(--muted-foreground)",
                 }}
               >
-                {tab === "overview"
-                  ? "Ringkasan"
-                  : tab === "badges"
-                    ? "Lencana"
-                    : "Statistik"}
+                {tab === "overview" ? "Ringkasan" : "Statistik"}
               </span>
             </button>
           ))}
@@ -630,7 +614,7 @@ export function ProfilePage({
       </div>
 
       <AnimatePresence mode="wait">
-        {/* OVERVIEW TAB */}
+        {/* ── OVERVIEW TAB ─────────────────────────────────────────────────── */}
         {activeTab === "overview" && (
           <motion.div
             key="overview"
@@ -639,7 +623,7 @@ export function ProfilePage({
             exit={{ opacity: 0, y: -10 }}
             className="px-5 space-y-5"
           >
-            {/* Streak calendar */}
+            {/* GitHub-style contribution calendar */}
             <div
               className="rounded-2xl p-4"
               style={{
@@ -649,69 +633,139 @@ export function ProfilePage({
             >
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <Calendar
-                    size={16}
-                    style={{ color: "var(--streak-color)" }}
-                  />
+                  <Zap size={16} style={{ color: "var(--streak-color)" }} />
                   <span
                     className="text-foreground"
                     style={{ fontWeight: 700, fontSize: "0.9rem" }}
                   >
-                    Streak Login
+                    Riwayat Login
                   </span>
                 </div>
                 <span
                   style={{
                     fontWeight: 800,
                     color: "var(--streak-color)",
-                    fontSize: "0.9rem",
+                    fontSize: "0.82rem",
                   }}
                 >
-                  🔥 {streak} hari
+                  {totalLoginDays} hari aktif
                 </span>
               </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(7, 1fr)",
-                  gap: "4px",
-                }}
-              >
-                {streakCal.map((day, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, scale: 0 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: i * 0.01 }}
-                    className="aspect-square rounded-sm"
-                    style={{ background: intensityColor(day.intensity) }}
-                  />
-                ))}
-              </div>
-              <div className="flex items-center justify-end gap-2 mt-2">
-                <span
-                  className="text-muted-foreground"
-                  style={{ fontSize: "0.65rem" }}
-                >
-                  Kurang
-                </span>
-                {[0, 1, 2, 3].map((n) => (
+
+              {/* Calendar grid — mirrors GitHub's layout */}
+              <div style={{ overflowX: "auto", paddingBottom: "4px" }}>
+                <div style={{ display: "inline-block", minWidth: "max-content" }}>
+                  {/* Month label row */}
                   <div
-                    key={n}
-                    className="w-3 h-3 rounded-sm"
-                    style={{ background: intensityColor(n) }}
-                  />
-                ))}
-                <span
-                  className="text-muted-foreground"
-                  style={{ fontSize: "0.65rem" }}
-                >
-                  Lebih
-                </span>
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: `20px repeat(${WEEK_COUNT}, 11px)`,
+                      gap: "2px",
+                      marginBottom: "2px",
+                    }}
+                  >
+                    <div />
+                    {Array.from({ length: WEEK_COUNT }, (_, w) => {
+                      const monthLabel = monthLabels.find((ml) => ml.col === w);
+                      return (
+                        <div
+                          key={w}
+                          style={{
+                            fontSize: "0.6rem",
+                            color: "var(--muted-foreground)",
+                            lineHeight: 1,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {monthLabel ? monthLabel.label : ""}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Weekday labels + cell grid */}
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: `20px repeat(${WEEK_COUNT}, 11px)`,
+                      gridTemplateRows: "repeat(7, 11px)",
+                      gap: "2px",
+                    }}
+                  >
+                    {/* Weekday label column — 7 rows */}
+                    {WEEKDAY_LABELS.map((lbl, row) => (
+                      <div
+                        key={row}
+                        style={{
+                          gridColumn: 1,
+                          gridRow: row + 1,
+                          fontSize: "0.58rem",
+                          color: "var(--muted-foreground)",
+                          display: "flex",
+                          alignItems: "center",
+                          lineHeight: 1,
+                        }}
+                      >
+                        {lbl}
+                      </div>
+                    ))}
+
+                    {/* 364 cells: column = week, row = weekday */}
+                    {calendarCells.map((cell, i) => {
+                      const week = Math.floor(i / 7); // column index (0-based)
+                      const dow = i % 7; // row index (0 = Sun)
+                      return (
+                        <div
+                          key={cell.dateStr}
+                          title={`${cell.dateStr}${cell.count > 0 ? " ✓ login" : ""}`}
+                          style={{
+                            gridColumn: week + 2, // +2 because col 1 is the label
+                            gridRow: dow + 1,
+                            width: "11px",
+                            height: "11px",
+                            borderRadius: "2px",
+                            background: cellColor(cell.count, avatarColor),
+                            transition: "background 0.15s",
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+
+                  {/* Legend */}
+                  <div
+                    className="flex items-center gap-1.5 mt-3"
+                    style={{ justifyContent: "flex-end" }}
+                  >
+                    <span
+                      className="text-muted-foreground"
+                      style={{ fontSize: "0.6rem" }}
+                    >
+                      Kurang
+                    </span>
+                    {[0, 1, 2, 3].map((lvl) => (
+                      <div
+                        key={lvl}
+                        style={{
+                          width: "10px",
+                          height: "10px",
+                          borderRadius: "2px",
+                          background: cellColor(lvl, avatarColor),
+                        }}
+                      />
+                    ))}
+                    <span
+                      className="text-muted-foreground"
+                      style={{ fontSize: "0.6rem" }}
+                    >
+                      Lebih
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Skills radar */}
+            {/* Skill radar */}
             <div
               className="rounded-2xl p-4"
               style={{
@@ -761,7 +815,7 @@ export function ProfilePage({
               )}
             </div>
 
-            {/* Recent activity */}
+            {/* Recently completed modules */}
             <div
               className="rounded-2xl p-4"
               style={{
@@ -843,7 +897,10 @@ export function ProfilePage({
                 className="w-10 h-10 rounded-xl flex items-center justify-center"
                 style={{ background: "oklch(0.55 0.22 25 / 0.1)" }}
               >
-                <Settings size={18} style={{ color: "oklch(0.55 0.22 25)" }} />
+                <Settings
+                  size={18}
+                  style={{ color: "oklch(0.55 0.22 25)" }}
+                />
               </div>
               <div className="flex-1">
                 <p
@@ -864,94 +921,7 @@ export function ProfilePage({
           </motion.div>
         )}
 
-        {/* BADGES TAB */}
-        {activeTab === "badges" && (
-          <motion.div
-            key="badges"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="px-5"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <p
-                className="text-muted-foreground"
-                style={{ fontSize: "0.82rem" }}
-              >
-                <span style={{ fontWeight: 800, color: "var(--exp-color)" }}>
-                  {unlockedBadges}
-                </span>{" "}
-                dari {BADGES.length} lencana terbuka
-              </p>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              {BADGES.map((badge, i) => (
-                <motion.div
-                  key={badge.id}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: i * 0.04 }}
-                  whileHover={badge.unlocked ? { y: -3 } : {}}
-                  className="rounded-2xl p-3 text-center relative overflow-hidden"
-                  style={{
-                    background: badge.unlocked ? "var(--card)" : "var(--muted)",
-                    border: badge.unlocked
-                      ? `1px solid ${avatarColor}40`
-                      : "1px solid var(--border)",
-                    opacity: badge.unlocked ? 1 : 0.55,
-                  }}
-                >
-                  {badge.unlocked && (
-                    <div
-                      className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center"
-                      style={{ background: avatarColor }}
-                    >
-                      <Check
-                        size={9}
-                        style={{ color: "oklch(0.10 0.025 255)" }}
-                      />
-                    </div>
-                  )}
-                  <div
-                    className="text-3xl mb-1.5"
-                    style={{ filter: badge.unlocked ? "none" : "grayscale(1)" }}
-                  >
-                    {badge.emoji}
-                  </div>
-                  <p
-                    className="text-foreground"
-                    style={{
-                      fontWeight: 700,
-                      fontSize: "0.72rem",
-                      lineHeight: 1.3,
-                      marginBottom: "3px",
-                    }}
-                  >
-                    {badge.label}
-                  </p>
-                  <p
-                    className="text-muted-foreground"
-                    style={{ fontSize: "0.62rem", lineHeight: 1.4 }}
-                  >
-                    {badge.desc}
-                  </p>
-                  {!badge.unlocked && (
-                    <div className="mt-1.5">
-                      <span
-                        className="text-muted-foreground"
-                        style={{ fontSize: "0.6rem" }}
-                      >
-                        🔒 Terkunci
-                      </span>
-                    </div>
-                  )}
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-
-        {/* STATS TAB */}
+        {/* ── STATS TAB ──────────────────────────────────────────────────────── */}
         {activeTab === "stats" && (
           <motion.div
             key="stats"
@@ -960,68 +930,7 @@ export function ProfilePage({
             exit={{ opacity: 0, y: -10 }}
             className="px-5 space-y-5"
           >
-            {/* Weekly EXP chart */}
-            <div
-              className="rounded-2xl p-4"
-              style={{
-                background: "var(--card)",
-                border: "1px solid var(--border)",
-              }}
-            >
-              <div className="flex items-center gap-2 mb-3">
-                <Zap size={16} style={{ color: "var(--exp-color)" }} />
-                <span
-                  className="text-foreground"
-                  style={{ fontWeight: 700, fontSize: "0.9rem" }}
-                >
-                  EXP Minggu Ini
-                </span>
-                <span
-                  className="ml-auto"
-                  style={{
-                    fontSize: "0.72rem",
-                    color: "var(--exp-color)",
-                    fontWeight: 700,
-                  }}
-                >
-                  Total: {weeklyExp.reduce((a, b) => a + b.exp, 0)} EXP
-                </span>
-              </div>
-              <ResponsiveContainer width="100%" height={130}>
-                <BarChart data={weeklyExp} barSize={24}>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="oklch(0.28 0.03 255 / 0.3)"
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="day"
-                    tick={{ fill: "oklch(0.58 0.02 255)", fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={{ fill: "oklch(0.58 0.02 255)", fontSize: 10 }}
-                    width={30}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      background: "oklch(0.14 0.025 255)",
-                      border: "1px solid oklch(0.28 0.03 255)",
-                      borderRadius: "8px",
-                      color: "var(--foreground)",
-                      fontSize: "0.75rem",
-                    }}
-                    formatter={(value) => [`${value} EXP`, "EXP"]}
-                  />
-                  <Bar dataKey="exp" fill={avatarColor} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Detailed stats */}
+            {/* Full statistics */}
             <div
               className="rounded-2xl p-4"
               style={{
@@ -1030,7 +939,10 @@ export function ProfilePage({
               }}
             >
               <div className="flex items-center gap-2 mb-4">
-                <Shield size={16} style={{ color: "oklch(0.60 0.20 265)" }} />
+                <Shield
+                  size={16}
+                  style={{ color: "oklch(0.60 0.20 265)" }}
+                />
                 <span
                   className="text-foreground"
                   style={{ fontWeight: 700, fontSize: "0.9rem" }}
@@ -1051,30 +963,28 @@ export function ProfilePage({
                     color: "var(--exp-color)",
                   },
                   {
+                    label: "EXP Minggu Ini",
+                    value: `${totalWeeklyExp} EXP`,
+                    color: "oklch(0.80 0.17 75)",
+                  },
+                  {
                     label: "Modul Diselesaikan",
                     value: `${completedCount} / ${MODULES.length} modul`,
                     color: "oklch(0.60 0.20 265)",
                   },
                   {
                     label: "Streak Login Terlama",
-                    value: `${streak} hari`,
+                    value: `${longestStreak} hari`,
                     color: "var(--streak-color)",
                   },
                   {
-                    label: "Lencana Diraih",
-                    value: `${unlockedBadges} lencana`,
-                    color: "oklch(0.80 0.17 75)",
-                  },
-                  {
                     label: "Placement Level",
-                    value:
-                      user.placementLevel.charAt(0).toUpperCase() +
-                      user.placementLevel.slice(1),
+                    value: placementDisplay,
                     color: "oklch(0.65 0.18 310)",
                   },
                   {
                     label: "Bergabung Sejak",
-                    value: user.joinDate,
+                    value: user.joinDate || "—",
                     color: "var(--muted-foreground)",
                   },
                 ].map((item) => (
@@ -1103,7 +1013,7 @@ export function ProfilePage({
               </div>
             </div>
 
-            {/* Category breakdown */}
+            {/* Category progress */}
             <div
               className="rounded-2xl p-4"
               style={{
@@ -1112,7 +1022,10 @@ export function ProfilePage({
               }}
             >
               <div className="flex items-center gap-2 mb-4">
-                <BookOpen size={16} style={{ color: "oklch(0.72 0.19 145)" }} />
+                <BookOpen
+                  size={16}
+                  style={{ color: "oklch(0.72 0.19 145)" }}
+                />
                 <span
                   className="text-foreground"
                   style={{ fontWeight: 700, fontSize: "0.9rem" }}
@@ -1121,22 +1034,14 @@ export function ProfilePage({
                 </span>
               </div>
               <div className="space-y-3">
-                {[
-                  {
-                    label: "Literasi Keuangan",
-                    ids: ["m1", "m2", "m3", "m5", "m6"],
-                    color: "oklch(0.80 0.17 75)",
-                  },
-                  {
-                    label: "Pasar Modal & Saham",
-                    ids: ["m4", "m7", "m8", "m9", "m10", "m11", "m12"],
-                    color: "oklch(0.60 0.20 265)",
-                  },
-                ].map((cat) => {
-                  const done = cat.ids.filter((id) =>
+                {CATEGORY_GROUPS.map((cat) => {
+                  const done = cat.moduleIds.filter((id) =>
                     completedModules.includes(id),
                   ).length;
-                  const pct = Math.round((done / cat.ids.length) * 100);
+                  const pct =
+                    cat.moduleIds.length > 0
+                      ? Math.round((done / cat.moduleIds.length) * 100)
+                      : 0;
                   return (
                     <div key={cat.label}>
                       <div className="flex items-center justify-between mb-1.5">
@@ -1153,7 +1058,7 @@ export function ProfilePage({
                             color: cat.color,
                           }}
                         >
-                          {done}/{cat.ids.length} ({pct}%)
+                          {done}/{cat.moduleIds.length} ({pct}%)
                         </span>
                       </div>
                       <div

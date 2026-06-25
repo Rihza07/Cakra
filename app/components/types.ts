@@ -20,7 +20,12 @@ export interface UserProfile {
   maxExp: number;
   streak: number;
   placementLevel: 'pemula' | 'menengah' | 'mahir';
-  joinDate: string;
+  joinDate: string;        // "YYYY-MM-DD", empty string for new users
+  bio?: string;            // optional editable bio line
+  loginDates: string[];    // "YYYY-MM-DD" entry per unique login day
+  completedModules: string[];
+  completedModuleDates: Record<string, string>;
+  dailyXpHistory: Record<string, number>;
 }
 
 export interface Module {
@@ -63,4 +68,6 @@ export interface AppContextType {
   challengeDay: number;
   setChallengeDay: React.Dispatch<React.SetStateAction<number>>;
   prevLevel: number;
+  longestStreak: number;                                                         // computed from user.loginDates
+  onUpdateUser: (updates: Partial<Pick<UserProfile, 'name' | 'bio'>>) => void;  // for profile edits
 }

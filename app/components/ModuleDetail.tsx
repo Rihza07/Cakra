@@ -7,9 +7,8 @@ import { MODULES, QUIZ_QUESTIONS } from './data';
 interface ModuleDetailProps {
   moduleId: string;
   navigate: (screen: Screen, moduleId?: string) => void;
-  addExp: (amount: number, reason?: string) => void;
   completedModules: string[];
-  setCompletedModules: React.Dispatch<React.SetStateAction<string[]>>;
+  onCompleteModule: (moduleId: string, expReward: number) => void;
 }
 
 const MODULE_CONTENT: Record<string, string[]> = {
@@ -128,7 +127,7 @@ const VIDEO_THUMBNAILS: Record<string, string> = {
 
 type TabType = 'video' | 'materi' | 'quiz';
 
-export function ModuleDetail({ moduleId, navigate, addExp, completedModules, setCompletedModules }: ModuleDetailProps) {
+export function ModuleDetail({ moduleId, navigate, completedModules, onCompleteModule }: ModuleDetailProps) {
   const mod = MODULES.find(m => m.id === moduleId);
   const [tab, setTab] = useState<TabType>('video');
   const [videoPlaying, setVideoPlaying] = useState(false);
@@ -137,7 +136,6 @@ export function ModuleDetail({ moduleId, navigate, addExp, completedModules, set
   const [answers, setAnswers] = useState<number[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
   const [quizDone, setQuizDone] = useState(false);
-  const [retrying, setRetrying] = useState(false);
 
   if (!mod) return null;
 
@@ -157,8 +155,7 @@ export function ModuleDetail({ moduleId, navigate, addExp, completedModules, set
         const score = newAnswers.filter((a, i) => a === questions[i].answer).length;
         const passed = score >= Math.ceil(questions.length * 0.6);
         if (passed && !isCompleted) {
-          setCompletedModules(prev => [...prev, moduleId]);
-          addExp(mod.expReward, `Menyelesaikan: ${mod.title}`);
+          onCompleteModule(moduleId, mod.expReward);
         }
       } else {
         setCurrent(c => c + 1);
@@ -172,7 +169,6 @@ export function ModuleDetail({ moduleId, navigate, addExp, completedModules, set
     setAnswers([]);
     setSelected(null);
     setQuizDone(false);
-    setRetrying(true);
   };
 
   const score = answers.filter((a, i) => a === questions[i].answer).length;
