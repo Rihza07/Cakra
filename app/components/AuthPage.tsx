@@ -33,6 +33,8 @@ export function AuthPage({ onAuth }: AuthPageProps) {
 
     setLoading(true);
 
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
     try {
       if (mode === "register") {
         const response = await fetch("/api/auth/register", {
@@ -44,6 +46,7 @@ export function AuthPage({ onAuth }: AuthPageProps) {
             name,
             email,
             password,
+            timezone,
           }),
         });
 
@@ -72,6 +75,7 @@ export function AuthPage({ onAuth }: AuthPageProps) {
           body: JSON.stringify({
             email,
             password,
+            timezone,
           }),
         });
 

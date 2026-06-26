@@ -59,6 +59,13 @@ const AVATAR_COLORS = [
 
 // ─── GitHub-style contribution calendar ───────────────────────────────────────
 
+function formatLocalDateString(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 // Returns an array of 52 weeks × 7 days = 364 cells, newest cell = today.
 // Each cell carries { dateStr, count } where count is 0 or 1 (logged-in that day).
 function buildContributionCalendar(loginDates: string[]) {
@@ -70,7 +77,7 @@ function buildContributionCalendar(loginDates: string[]) {
   return Array.from({ length: TOTAL_DAYS }, (_, i) => {
     const d = new Date(today);
     d.setDate(today.getDate() - (TOTAL_DAYS - 1 - i));
-    const dateStr = d.toISOString().slice(0, 10);
+    const dateStr = formatLocalDateString(d);
     const count = loginSet.has(dateStr) ? 1 : 0;
     return { dateStr, count };
   });
@@ -103,7 +110,7 @@ function buildMonthLabels(
   for (let w = 0; w < weekCount; w++) {
     const cellIdx = w * 7;
     if (cellIdx >= cells.length) break;
-    const m = new Date(cells[cellIdx].dateStr).getMonth();
+    const m = new Date(`${cells[cellIdx].dateStr}T00:00:00`).getMonth();
     if (m !== lastMonth) {
       labels.push({ label: months[m], col: w });
       lastMonth = m;
