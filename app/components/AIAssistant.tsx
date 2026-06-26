@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, Bot, User, Sparkles, ChevronDown } from 'lucide-react';
+import { Send, Bot, User, Sparkles } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -13,22 +13,6 @@ interface AIAssistantProps {
   addExp: (amount: number, reason?: string) => void;
 }
 
-const AI_RESPONSES: [RegExp, string][] = [
-  [/saham|stock/i, 'Saham adalah bukti kepemilikan sebagian perusahaan. Ketika kamu membeli saham BBCA misalnya, kamu menjadi pemilik kecil Bank BCA. Keuntungan dari saham berasal dari dua sumber:\n\n1. **Dividen** — bagian laba perusahaan yang dibagikan kepada pemegang saham\n2. **Capital Gain** — selisih harga jual dan beli saham\n\nInvestasi saham memiliki risiko lebih tinggi dibanding deposito, namun potensi returnnya juga lebih besar secara historis. Di BEI, 1 lot = 100 lembar saham.\n\nAda yang ingin kamu tanya lebih lanjut tentang saham?'],
-  [/inflasi|inflation/i, 'Inflasi adalah kenaikan harga barang dan jasa secara umum dan terus-menerus. Bayangkan: uang Rp100.000 tahun ini bisa beli 10 kg beras, tapi 10 tahun lagi mungkin hanya bisa beli 8 kg karena harga beras naik.\n\n**Dampak inflasi pada investasi:**\n- Tabungan biasa bisa kalah dari inflasi\n- Saham dan reksa dana saham historis mengalahkan inflasi jangka panjang\n- Bank Indonesia menargetkan inflasi 2-4% per tahun\n\nInilah mengapa penting berinvestasi — untuk mempertahankan dan menumbuhkan daya beli uangmu!'],
-  [/reksa dana|reksadana|mutual fund/i, 'Reksa dana adalah wadah investasi kolektif yang dikelola manajer investasi profesional. Ibaratnya: uangmu dikumpulkan bersama ribuan investor lain, lalu dikelola oleh manajer berpengalaman.\n\n**4 Jenis Reksa Dana (dari risiko rendah ke tinggi):**\n1. 📊 Reksa Dana Pasar Uang — return 4-6% p.a., sangat likuid\n2. 📈 Reksa Dana Pendapatan Tetap — return 6-9% p.a., lebih stabil\n3. 🔀 Reksa Dana Campuran — return 8-12% p.a., balanced\n4. 🚀 Reksa Dana Saham — return > 12% p.a. jangka panjang, volatil\n\nKamu bisa mulai investasi reksa dana dari Rp10.000 saja!'],
-  [/diversifikasi|diversification/i, '"Jangan taruh semua telur dalam satu keranjang" — itulah inti diversifikasi!\n\nDiversifikasi artinya menyebar investasi ke berbagai aset agar risiko berkurang. Contoh:\n\n✅ **Portofolio Terdiversifikasi:**\n- 40% Reksa Dana Saham\n- 30% Obligasi/ORI\n- 20% Reksa Dana Pasar Uang (dana darurat)\n- 10% Emas\n\n❌ **Risiko Konsentrasi:**\n- 100% dalam satu saham\n- Jika perusahaan itu bangkrut, seluruh modal hilang\n\nDiversifikasi tidak menghilangkan risiko, tapi menguranginya secara signifikan!'],
-  [/pe ratio|per|price earning/i, 'PE Ratio (Price to Earnings Ratio) adalah rasio yang membandingkan harga saham dengan laba per saham (EPS).\n\n**Rumus:** PE = Harga Saham ÷ EPS\n\nContoh: Saham BBCA harga Rp9.000, EPS Rp450 → PE = 20x\n\n**Interpretasi PE:**\n- PE rendah (< 15x): bisa berarti saham murah (undervalued)\n- PE tinggi (> 25x): bisa berarti saham mahal (overvalued) atau ekspektasi pertumbuhan tinggi\n- Bandingkan selalu dengan rata-rata industri!\n\n⚠️ PE saja tidak cukup — selalu analisis bersama rasio lain seperti PBV, ROE, dan pertumbuhan laba.'],
-  [/obligasi|bond|sbn|ori/i, 'Obligasi adalah surat utang — kamu meminjamkan uang ke perusahaan/pemerintah dan mendapat bunga (kupon) secara berkala.\n\n**Jenis Obligasi:**\n1. ORI (Obligasi Ritel Indonesia) — diterbitkan pemerintah, sangat aman\n2. SBR (Saving Bond Ritel) — bunga mengambang mengikuti BI Rate\n3. Sukuk Ritel — prinsip syariah\n4. Obligasi Korporasi — diterbitkan perusahaan, imbal hasil lebih tinggi, risiko lebih besar\n\nKeunggulan obligasi: aliran pendapatan tetap, lebih stabil dari saham, dan ORI dijamin negara!'],
-  [/stop loss/i, 'Stop loss adalah order otomatis untuk menjual saham jika harganya turun ke level tertentu — melindungimu dari kerugian besar.\n\n**Contoh:**\nBeli GOTO di harga Rp100 → pasang stop loss di Rp85 (toleransi rugi 15%)\nJika harga turun ke Rp85, sistem otomatis jual → kerugianmu terbatas di 15%\n\n**Tips penggunaan stop loss:**\n✅ Tentukan sebelum masuk posisi, bukan setelah\n✅ Letakkan di bawah level support\n✅ Konsisten — jangan geser stop loss ke bawah saat harga mendekatinya\n❌ Jangan pasang terlalu ketat (kena "stop loss hunt")\n\nStop loss adalah alat manajemen risiko yang wajib bagi setiap trader!'],
-  [/roe|return on equity/i, 'ROE (Return on Equity) mengukur seberapa efisien perusahaan menggunakan modal pemegang saham untuk menghasilkan laba.\n\n**Rumus:** ROE = Laba Bersih ÷ Ekuitas × 100%\n\nContoh: Laba Bersih Rp10 triliun, Ekuitas Rp50 triliun → ROE = 20%\n\n**Interpretasi:**\n- ROE > 15%: umumnya dianggap baik\n- ROE > 20%: sangat baik, perusahaan sangat efisien\n- ROE < 10%: perlu diwaspadai\n\nPerusahaan dengan ROE konsisten tinggi selama bertahun-tahun adalah tanda manajemen yang kompeten. Cek ROE BBCA, BBRI, atau UNVR untuk referensi!'],
-  [/candlestick/i, 'Candlestick adalah representasi visual pergerakan harga dalam satu periode (menit, jam, hari, dll).\n\n**Anatomi Candlestick:**\n🕯️ Body (badan): selisih harga open dan close\n📏 Upper Shadow (ekor atas): harga tertinggi\n📏 Lower Shadow (ekor bawah): harga terendah\n\n**Warna:**\n🟢 Hijau/Putih: harga close > open (bullish)\n🔴 Merah/Hitam: harga close < open (bearish)\n\n**Pola Penting:**\n- Doji: open ≈ close, ketidakpastian\n- Hammer: ekor panjang bawah, potensi reversal naik\n- Shooting Star: ekor panjang atas, potensi reversal turun\n- Bullish Engulfing: candle hijau "menelan" candle merah sebelumnya'],
-  [/portofolio|portfolio/i, 'Portofolio investasi adalah kumpulan aset investasi yang kamu miliki — bisa berisi saham, obligasi, reksa dana, emas, properti, dll.\n\n**Prinsip Membangun Portofolio:**\n1. Tentukan profil risiko (konservatif/moderat/agresif)\n2. Alokasikan aset sesuai profil dan horizon investasi\n3. Diversifikasi antar kelas aset\n4. Rebalancing berkala (tiap 6-12 bulan)\n\n**Contoh Alokasi:**\n🛡️ Konservatif: 20% saham, 60% obligasi, 20% pasar uang\n⚖️ Moderat: 50% saham, 35% obligasi, 15% pasar uang\n🚀 Agresif: 80% saham, 15% obligasi, 5% pasar uang\n\nPilih sesuai tujuan investasi dan toleransi risiko!'],
-  [/soal|latihan|contoh soal/i, 'Oke! Coba selesaikan soal latihan ini:\n\n📝 **Soal:** Perusahaan XYZ memiliki harga saham Rp5.000 dan EPS (Earning Per Share) sebesar Rp250. Rata-rata PE industri adalah 18x. Apakah saham XYZ tergolong overvalued, fair value, atau undervalued?\n\n**Hint:** Hitung PE saham XYZ terlebih dahulu!\n\nJawab dulu di chat ini, nanti kita bahas bersama! 😊'],
-  [/terima kasih|makasih|thanks/i, 'Sama-sama! Senang bisa membantu perjalanan belajarmu 😊\n\nJangan ragu untuk bertanya kapan saja — baik tentang konsep dasar keuangan, analisis saham, strategi investasi, atau minta soal latihan.\n\nTerus semangat belajar dan raih kebebasan finansialmu! 💪📈'],
-  [/halo|hi|hello|hai/i, 'Halo! Saya CAKRA AI — asisten belajar literasi keuangan & investasimu 👋\n\nSaya bisa membantu kamu:\n📚 Menjelaskan konsep keuangan dan investasi\n💡 Menjawab pertanyaan tentang saham, reksa dana, obligasi\n🧮 Memberikan soal latihan untuk mengasah pemahamanmu\n📊 Menganalisis contoh kasus investasi\n\nAda yang ingin kamu pelajari hari ini?'],
-];
-
 const SUGGESTIONS = [
   'Apa itu saham dan cara belinya?',
   'Jelaskan diversifikasi portofolio',
@@ -37,13 +21,6 @@ const SUGGESTIONS = [
   'Cara menghitung PE Ratio?',
   'Apa itu stop loss?',
 ];
-
-function getResponse(input: string): string {
-  for (const [pattern, resp] of AI_RESPONSES) {
-    if (pattern.test(input)) return resp;
-  }
-  return `Pertanyaan yang bagus tentang "${input}"! 🤔\n\nSaat ini saya paling bisa membantu tentang:\n• Saham & analisis fundamental/teknikal\n• Reksa dana & obligasi\n• Manajemen risiko & diversifikasi\n• Konsep keuangan dasar\n• Soal latihan investasi\n\nCoba tanyakan lebih spesifik tentang topik di atas, atau ketik "soal latihan" untuk berlatih soal!`;
-}
 
 export function AIAssistant({ addExp }: AIAssistantProps) {
   const [messages, setMessages] = useState<Message[]>([
@@ -56,32 +33,82 @@ export function AIAssistant({ addExp }: AIAssistantProps) {
   const [loading, setLoading] = useState(false);
   const [questionCount, setQuestionCount] = useState(0);
   const [expGiven, setExpGiven] = useState(false);
+  const [limitReached, setLimitReached] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const send = () => {
-    if (!input.trim() || loading) return;
-    const userMsg: Message = { id: Date.now().toString(), role: 'user', text: input, time: 'sekarang' };
+  const send = async () => {
+    const trimmed = input.trim();
+    if (!trimmed || loading || limitReached) return;
+
+    const userMsg: Message = { id: Date.now().toString(), role: 'user', text: trimmed, time: 'sekarang' };
     setMessages(prev => [...prev, userMsg]);
-    const q = input;
+    const q = trimmed;
     setInput('');
     setLoading(true);
+    setErrorMessage('');
 
-    const newCount = questionCount + 1;
-    setQuestionCount(newCount);
-    if (newCount === 3 && !expGiven) {
-      setExpGiven(true);
-      addExp(30, 'Tanya AI Assistant 3x');
-    }
+    try {
+      let userEmail = '';
+      let guestId = '';
 
-    setTimeout(() => {
-      const resp = getResponse(q);
+      if (typeof window !== 'undefined') {
+        const storedUser = window.localStorage.getItem('cakra-user');
+        if (storedUser) {
+          try {
+            const parsed = JSON.parse(storedUser);
+            userEmail = typeof parsed?.email === 'string' ? parsed.email : '';
+          } catch {
+            userEmail = '';
+          }
+        }
+
+        guestId = window.localStorage.getItem('cakra-ai-guest-id') || '';
+        if (!guestId) {
+          guestId = `guest-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          window.localStorage.setItem('cakra-ai-guest-id', guestId);
+        }
+      }
+
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: q,
+          userEmail,
+          guestId,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        if (data.error === 'Daily AI limit reached.') {
+          setLimitReached(true);
+        }
+        throw new Error(data.error || 'AI request failed');
+      }
+
+      const resp = data.reply || 'Saya belum bisa menjawab saat ini.';
       setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', text: resp, time: 'sekarang' }]);
+
+      const newCount = questionCount + 1;
+      setQuestionCount(newCount);
+      if (!expGiven) {
+        setExpGiven(true);
+        addExp(10, 'Tanya AI Assistant');
+      }
+    } catch (error) {
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', text: error instanceof Error ? error.message : 'Maaf, AI sedang tidak tersedia.', time: 'sekarang' }]);
+      setErrorMessage(error instanceof Error ? error.message : 'Maaf, AI sedang tidak tersedia.');
+    } finally {
       setLoading(false);
-    }, 800 + Math.random() * 600);
+    }
   };
 
   const formatText = (text: string) => {
@@ -112,7 +139,7 @@ export function AIAssistant({ addExp }: AIAssistantProps) {
           </div>
           <div className="ml-auto px-3 py-1 rounded-full"
             style={{ background: 'oklch(0.80 0.17 75 / 0.15)', border: '1px solid oklch(0.80 0.17 75 / 0.3)' }}>
-            <span style={{ color: 'var(--exp-color)', fontSize: '0.72rem', fontWeight: 700 }}>+30 EXP / 3 tanya</span>
+            <span style={{ color: 'var(--exp-color)', fontSize: '0.72rem', fontWeight: 700 }}>+10 EXP / tanya</span>
           </div>
         </div>
       </div>
@@ -185,23 +212,34 @@ export function AIAssistant({ addExp }: AIAssistantProps) {
             <textarea
               value={input}
               onChange={e => { setInput(e.target.value); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'; }}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-              placeholder="Tanya tentang investasi, saham, reksa dana..."
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); } }}
+              placeholder={limitReached ? 'Batas AI harian tercapai' : 'Tanya tentang investasi, saham, reksa dana...'}
               rows={1}
+              disabled={limitReached || loading}
               className="w-full px-4 py-3 rounded-xl resize-none text-foreground placeholder:text-muted-foreground outline-none"
-              style={{ background: 'var(--input-background)', border: '1px solid var(--border)', fontSize: '0.875rem', lineHeight: 1.5, maxHeight: '120px', overflow: 'hidden' }}
+              style={{ background: 'var(--input-background)', border: '1px solid var(--border)', fontSize: '0.875rem', lineHeight: 1.5, maxHeight: '120px', overflow: 'hidden', opacity: limitReached ? 0.7 : 1 }}
             />
           </div>
-          <button onClick={send} disabled={!input.trim() || loading}
+          <button onClick={() => { void send(); }} disabled={!input.trim() || loading || limitReached}
             className="w-11 h-11 rounded-xl flex items-center justify-center transition-all hover:opacity-90 active:scale-95 flex-shrink-0"
-            style={{ background: input.trim() ? 'oklch(0.72 0.19 145)' : 'var(--muted)', opacity: !input.trim() || loading ? 0.5 : 1 }}>
-            <Send size={18} style={{ color: input.trim() ? 'oklch(0.12 0.02 145)' : 'var(--muted-foreground)' }} />
+            style={{ background: input.trim() && !limitReached ? 'oklch(0.72 0.19 145)' : 'var(--muted)', opacity: !input.trim() || loading || limitReached ? 0.5 : 1 }}>
+            <Send size={18} style={{ color: input.trim() && !limitReached ? 'oklch(0.12 0.02 145)' : 'var(--muted-foreground)' }} />
           </button>
         </div>
-        <p className="text-muted-foreground mt-2 text-center" style={{ fontSize: '0.68rem' }}>
-          <Sparkles size={10} className="inline mr-1" />
-          AI simulasi untuk tujuan edukasi — bukan saran investasi
-        </p>
+        {limitReached ? (
+          <p className="text-muted-foreground mt-2 text-center" style={{ fontSize: '0.68rem', color: 'oklch(0.72 0.19 145)' }}>
+            <Sparkles size={10} className="inline mr-1" />
+            You have reached today's AI limit. Please come back tomorrow.
+          </p>
+        ) : (
+          <p className="text-muted-foreground mt-2 text-center" style={{ fontSize: '0.68rem' }}>
+            <Sparkles size={10} className="inline mr-1" />
+            AI simulasi untuk tujuan edukasi — bukan saran investasi
+          </p>
+        )}
+        {errorMessage && (
+          <p className="text-center mt-2" style={{ fontSize: '0.7rem', color: 'var(--destructive)' }}>{errorMessage}</p>
+        )}
       </div>
     </div>
   );

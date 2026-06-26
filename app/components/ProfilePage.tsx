@@ -66,21 +66,34 @@ function formatLocalDateString(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-// Returns an array of 52 weeks × 7 days = 364 cells, newest cell = today.
+// Build a calendar for the current year, starting on the Sunday before Jan 1.
 // Each cell carries { dateStr, count } where count is 0 or 1 (logged-in that day).
 function buildContributionCalendar(loginDates: string[]) {
-  const loginSet = new Set(loginDates);
-  const TOTAL_DAYS = 364; // 52 full weeks
+  const loginSet = new Set(loginDates.filter((value) => typeof value === "string"));
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  return Array.from({ length: TOTAL_DAYS }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(today.getDate() - (TOTAL_DAYS - 1 - i));
+  const year = today.getFullYear();
+  const startOfYear = new Date(year, 0, 1);
+  startOfYear.setHours(0, 0, 0, 0);
+
+  const firstSunday = new Date(startOfYear);
+  firstSunday.setDate(startOfYear.getDate() - startOfYear.getDay());
+
+  const endDate = new Date(today);
+  const totalDays = Math.floor((endDate.getTime() - firstSunday.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  const weekCount = Math.max(1, Math.ceil(totalDays / 7));
+  const totalCells = weekCount * 7;
+
+  const cells = Array.from({ length: totalCells }, (_, i) => {
+    const d = new Date(firstSunday);
+    d.setDate(firstSunday.getDate() + i);
     const dateStr = formatLocalDateString(d);
     const count = loginSet.has(dateStr) ? 1 : 0;
     return { dateStr, count };
   });
+
+  return { cells, weekCount };
 }
 
 // Map login count to a visual intensity level 0–3 for colour ramp.
@@ -171,15 +184,13 @@ export function ProfilePage({
   const expPercent = user.maxExp > 0 ? (user.exp / user.maxExp) * 100 : 0;
   const completedCount = completedModules.length;
 
-  const calendarCells = useMemo(
+  const { cells: calendarCells, weekCount: WEEK_COUNT } = useMemo(
     () => buildContributionCalendar(loginDates),
     [loginDates],
   );
-  // 364 days → 52 weeks; cells are ordered oldest→newest, each week is a column.
-  const WEEK_COUNT = 52;
   const monthLabels = useMemo(
     () => buildMonthLabels(calendarCells, WEEK_COUNT),
-    [calendarCells],
+    [calendarCells, WEEK_COUNT],
   );
 
   const skillData = useMemo(
