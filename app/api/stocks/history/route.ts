@@ -19,7 +19,7 @@ export async function GET(req: Request) {
         FROM stock_history
         WHERE symbol = ?
         ORDER BY created_at ASC
-        LIMIT 100000
+        LIMIT 10000
         `,
         [symbol]
       );
